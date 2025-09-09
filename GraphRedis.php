@@ -87,7 +87,7 @@ class GraphRedis
     }
 
     /** 取邻居，支持分页，默认出边 */
-    public function neighbors(int $id, string $dir = 'out', int $page = 1, int $size = null): array
+    public function neighbors(int $id, string $dir = 'out', int $page = 1, ?int $size = null): array
     {
         $size = $size ?: $this->pageSize;
         $key  = "edge:$id:$dir";
