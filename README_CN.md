@@ -46,7 +46,8 @@ composer require predis/predis
 ```bash
 git clone <repository-url>
 cd GraphRedis
-php GraphRedis.php  # 运行示例
+composer install
+composer run demo  # 运行示例
 ```
 
 ## 📖 核心概念
@@ -71,11 +72,22 @@ php GraphRedis.php  # 运行示例
 ### 初始化连接
 
 ```php
-// 默认连接本地 Redis
+// 默认连接本地 Redis （数据库 0）
 $graph = new GraphRedis();
 
 // 自定义 Redis 连接
 $graph = new GraphRedis('192.168.1.100', 6380);
+
+// 指定 Redis 数据库（Redis 有 16 个数据库，编号 0-15）
+$graph = new GraphRedis('127.0.0.1', 6379, 0, 5); // 使用数据库 5
+
+// 完整参数示例
+$graph = new GraphRedis(
+    host: '127.0.0.1',      // Redis 主机
+    port: 6379,             // Redis 端口
+    timeout: 2,             // 连接超时（秒）
+    database: 3             // 数据库编号（0-15）
+);
 ```
 
 ### 节点操作
@@ -187,6 +199,57 @@ if ($result) {
 $visitOrder = $graph->dfs($alice, 5);
 echo "DFS 访问顺序: ";
 print_r($visitOrder);
+```
+
+### 数据库隔离管理
+
+Redis 提供 16 个数据库（编号 0-15），GraphRedis 支持指定数据库实现数据隔离。
+
+#### 基本使用
+```php
+// 开发环境使用数据库 0
+$devGraph = new GraphRedis('127.0.0.1', 6379, 0, 0);
+
+// 测试环境使用数据库 1  
+$testGraph = new GraphRedis('127.0.0.1', 6379, 0, 1);
+
+// 生产环境使用数据库 2
+$prodGraph = new GraphRedis('127.0.0.1', 6379, 0, 2);
+```
+
+#### 多应用隔离
+```php
+// 用户关系图 - 数据库 5
+$userGraph = new GraphRedis('127.0.0.1', 6379, 0, 5);
+$alice = $userGraph->addNode(['name' => 'Alice', 'type' => 'user']);
+
+// 产品关系图 - 数据库 6
+$productGraph = new GraphRedis('127.0.0.1', 6379, 0, 6);
+$iphone = $productGraph->addNode(['name' => 'iPhone', 'type' => 'product']);
+
+// 公司组织架构 - 数据库 7
+$companyGraph = new GraphRedis('127.0.0.1', 6379, 0, 7);
+$ceo = $companyGraph->addNode(['name' => 'CEO', 'role' => 'executive']);
+
+// 数据完全隔离，Alice 只存在于用户图中
+echo $userGraph->nodeExists($alice) ? '用户图中有 Alice' : '用户图中无 Alice';
+echo $productGraph->nodeExists($alice) ? '产品图中有 Alice' : '产品图中无 Alice';
+```
+
+#### 数据库选择最佳实践
+- **数据库 0-2**：环境隔离（开发/测试/生产）
+- **数据库 3-7**：业务模块隔离（用户/产品/订单等）
+- **数据库 8-15**：临时数据或实验性功能
+
+#### 错误处理
+```php
+try {
+    // 无效的数据库编号会抛出异常
+    $graph = new GraphRedis('127.0.0.1', 6379, 0, 16);
+} catch (InvalidArgumentException $e) {
+    echo "错误: " . $e->getMessage();
+    // 输出: 错误: Redis database number must be between 0 and 15, got 16
+}
 ```
 
 ## 🎯 实际应用场景

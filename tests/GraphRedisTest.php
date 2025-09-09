@@ -207,4 +207,55 @@ class GraphRedisTest extends TestCase
         
         $this->assertNull($path);
     }
+
+    public function testDatabaseSelection(): void
+    {
+        // 测试默认数据库 (0)
+        $graph0 = new GraphRedis();
+        $graph0->clear();
+        $node1 = $graph0->addNode(['name' => 'Node in DB 0']);
+        
+        // 测试数据库 1
+        $graph1 = new GraphRedis('127.0.0.1', 6379, 0, 1);
+        $graph1->clear();
+        $node2 = $graph1->addNode(['name' => 'Node in DB 1']);
+        
+        // 验证数据隔离 - 节点数据应该隔离
+        $this->assertTrue($graph0->nodeExists($node1));
+        $this->assertTrue($graph1->nodeExists($node2));
+        
+        // 获取节点数据验证内容隔离
+        $nodeData0 = $graph0->getNode($node1);
+        $nodeData1 = $graph1->getNode($node2);
+        
+        $this->assertEquals('Node in DB 0', $nodeData0['name']);
+        $this->assertEquals('Node in DB 1', $nodeData1['name']);
+        
+        // 验证 ID 计数器的隔离
+        $stats0 = $graph0->getStats();
+        $stats1 = $graph1->getStats();
+        
+        $this->assertEquals(1, $stats0['nodes']);
+        $this->assertEquals(1, $stats1['nodes']);
+        
+        // 清理
+        $graph0->clear();
+        $graph1->clear();
+    }
+
+    public function testInvalidDatabaseNumber(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Redis database number must be between 0 and 15');
+        
+        new GraphRedis('127.0.0.1', 6379, 0, 16); // 无效的数据库号
+    }
+
+    public function testNegativeDatabaseNumber(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Redis database number must be between 0 and 15');
+        
+        new GraphRedis('127.0.0.1', 6379, 0, -1); // 负数数据库号
+    }
 }

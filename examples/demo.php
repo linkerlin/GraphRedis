@@ -14,10 +14,13 @@ use GraphRedis\GraphRedis;
 try {
     echo "=== GraphRedis 演示开始 ===\n\n";
     
+    // 使用数据库 0 (默认)
     $g = new GraphRedis();
     
     // 清空之前的数据
     $g->clear();
+    
+    echo "当前使用 Redis 数据库 0\n\n";
 
     // 1. 创建用户节点
     echo "1. 创建用户节点...\n";
@@ -148,6 +151,30 @@ try {
     } else {
         echo "暂无推荐好友\n";
     }
+
+    // 11. 数据库隔离演示
+    echo "\n11. 数据库隔离演示...\n";
+    
+    // 在数据库 1 中创建另一组用户
+    $g1 = new GraphRedis('127.0.0.1', 6379, 0, 1);
+    $g1->clear(); // 清空数据库 1
+    
+    $company_ceo = $g1->addNode(['name' => 'CEO', 'role' => 'Chief Executive']);
+    $company_cto = $g1->addNode(['name' => 'CTO', 'role' => 'Chief Technology']);
+    $g1->addEdge($company_ceo, $company_cto, 1.0, ['type' => 'reports_to']);
+    
+    echo "在数据库 1 中创建了公司组织架构\n";
+    
+    // 验证数据隔离
+    $db0_stats = $g->getStats();
+    $db1_stats = $g1->getStats();
+    
+    printf("数据库 0 统计: 节点 %d, 边 %d\n", $db0_stats['nodes'], $db0_stats['edges']);
+    printf("数据库 1 统计: 节点 %d, 边 %d\n", $db1_stats['nodes'], $db1_stats['edges']);
+    echo "数据库之间完全隔离，互不影响\n";
+    
+    // 清理数据库 1
+    $g1->clear();
 
     echo "\n=== GraphRedis 演示结束 ===\n";
 

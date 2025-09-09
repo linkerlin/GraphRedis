@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2023-12-09
+
+### Removed
+- Legacy GraphRedis.php file in root directory
+- Outdated documentation references to old file
+
+### Changed
+- Updated installation instructions in README_CN.md
+- Cleaned up project structure for Composer-only usage
+
+## [1.1.0] - 2023-12-09
+
+### Added
+- Redis database selection support (0-15 databases)
+- Database isolation for nodes, edges and counters
+- Enhanced constructor with database parameter
+- Database selection validation and error handling
+- New unit tests for database isolation
+- Database isolation demonstration in examples
+
+### Changed
+- Improved getStats() to work with database-specific counters
+- Updated documentation with database usage examples
+- Enhanced error messages for invalid database numbers
+
 ## [1.0.0] - 2023-12-09
 
 ### Added

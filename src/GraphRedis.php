@@ -17,6 +17,7 @@ class GraphRedis
 {
     private Redis $redis;
     private int $pageSize = 100;   // neighbors 默认分页大小
+    private int $database = 0;     // Redis database number
 
     /**
      * GraphRedis constructor
@@ -24,13 +25,26 @@ class GraphRedis
      * @param string $host Redis host
      * @param int $port Redis port
      * @param int $timeout Connection timeout
+     * @param int $database Redis database number (0-15)
      * @throws \RedisException
      */
-    public function __construct(string $host = '127.0.0.1', int $port = 6379, int $timeout = 0)
+    public function __construct(string $host = '127.0.0.1', int $port = 6379, int $timeout = 0, int $database = 0)
     {
+        if ($database < 0 || $database > 15) {
+            throw new \InvalidArgumentException("Redis database number must be between 0 and 15, got {$database}");
+        }
+        
         $this->redis = new Redis();
+        $this->database = $database;
+        
         if (!$this->redis->connect($host, $port, $timeout)) {
             throw new \RedisException("Failed to connect to Redis server at {$host}:{$port}");
+        }
+        
+        if ($database !== 0) {
+            if (!$this->redis->select($database)) {
+                throw new \RedisException("Failed to select Redis database {$database}");
+            }
         }
     }
 
@@ -65,7 +79,8 @@ class GraphRedis
      */
     public function addNode(array $prop): int
     {
-        $id = $this->redis->incr('global:node_id');
+        $counterKey = $this->database === 0 ? 'global:node_id' : "global:node_id:db{$this->database}";
+        $id = $this->redis->incr($counterKey);
         if (!empty($prop)) {
             $this->redis->hMSet("node:$id", $prop);
         }
@@ -307,7 +322,8 @@ class GraphRedis
      */
     public function getStats(): array
     {
-        $nodeCount = $this->redis->get('global:node_id') ?: 0;
+        $counterKey = $this->database === 0 ? 'global:node_id' : "global:node_id:db{$this->database}";
+        $nodeCount = $this->redis->get($counterKey) ?: 0;
         $edgeCount = 0;
         
         // Count edges by scanning all node edge lists
