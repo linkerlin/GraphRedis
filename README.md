@@ -1,6 +1,7 @@
 # GraphRedis
 
 A lightweight graph database implementation using Redis as storage backend.
+[【中文介绍】](README_CN.md)
 
 ## Installation
 
@@ -81,5 +82,5 @@ For detailed documentation in Chinese, see [README_CN.md](README_CN.md).
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+Apache License - see [LICENSE](LICENSE) file for details.
 [【中文介绍】](README_CN.md)
