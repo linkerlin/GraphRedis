@@ -8,7 +8,7 @@ use SplStack;
 
 /**
  * GraphRedis - A lightweight graph database using Redis as storage backend
- * 
+ *
  * @package GraphRedis
  * @author Your Name
  * @license MIT
@@ -21,7 +21,7 @@ class GraphRedis
 
     /**
      * GraphRedis constructor
-     * 
+     *
      * @param string $host Redis host
      * @param int $port Redis port
      * @param int $timeout Connection timeout
@@ -33,14 +33,14 @@ class GraphRedis
         if ($database < 0 || $database > 15) {
             throw new \InvalidArgumentException("Redis database number must be between 0 and 15, got {$database}");
         }
-        
+
         $this->redis = new Redis();
         $this->database = $database;
-        
+
         if (!$this->redis->connect($host, $port, $timeout)) {
             throw new \RedisException("Failed to connect to Redis server at {$host}:{$port}");
         }
-        
+
         if ($database !== 0) {
             if (!$this->redis->select($database)) {
                 throw new \RedisException("Failed to select Redis database {$database}");
@@ -50,7 +50,7 @@ class GraphRedis
 
     /**
      * Get Redis instance
-     * 
+     *
      * @return Redis
      */
     public function getRedis(): Redis
@@ -60,7 +60,7 @@ class GraphRedis
 
     /**
      * Set page size for neighbor queries
-     * 
+     *
      * @param int $size Page size
      * @return void
      */
@@ -73,7 +73,7 @@ class GraphRedis
 
     /**
      * 创建节点，返回全局唯一 id
-     * 
+     *
      * @param array $prop Node properties
      * @return int Node ID
      */
@@ -89,7 +89,7 @@ class GraphRedis
 
     /**
      * Get node by ID
-     * 
+     *
      * @param int $id Node ID
      * @return array|null Node properties or null if not found
      */
@@ -101,7 +101,7 @@ class GraphRedis
 
     /**
      * 增量更新节点属性
-     * 
+     *
      * @param int $id Node ID
      * @param array $diff Properties to update
      * @return void
@@ -115,7 +115,7 @@ class GraphRedis
 
     /**
      * 级联删除节点 + 所有出入边
-     * 
+     *
      * @param int $id Node ID
      * @return void
      */
@@ -124,10 +124,10 @@ class GraphRedis
         // 先查询出入边列表（在事务外）
         $out = $this->redis->zRange("edge:$id:out", 0, -1);
         $in = $this->redis->zRange("edge:$id:in", 0, -1);
-        
+
         // 开始事务删除
         $pipe = $this->redis->multi();
-        
+
         // 1. 删出边
         if ($out) {
             foreach ($out as $to) {
@@ -153,7 +153,7 @@ class GraphRedis
 
     /**
      * Check if node exists
-     * 
+     *
      * @param int $id Node ID
      * @return bool
      */
@@ -166,7 +166,7 @@ class GraphRedis
 
     /**
      * 添加/更新一条边（有向）
-     * 
+     *
      * @param int $from Source node ID
      * @param int $to Target node ID
      * @param float $weight Edge weight
@@ -186,7 +186,7 @@ class GraphRedis
 
     /**
      * Delete an edge
-     * 
+     *
      * @param int $from Source node ID
      * @param int $to Target node ID
      * @return void
@@ -202,7 +202,7 @@ class GraphRedis
 
     /**
      * Get edge properties
-     * 
+     *
      * @param int $from Source node ID
      * @param int $to Target node ID
      * @return array|null Edge properties or null if not found
@@ -215,7 +215,7 @@ class GraphRedis
 
     /**
      * Check if edge exists
-     * 
+     *
      * @param int $from Source node ID
      * @param int $to Target node ID
      * @return bool
@@ -227,7 +227,7 @@ class GraphRedis
 
     /**
      * 取邻居，支持分页，默认出边
-     * 
+     *
      * @param int $id Node ID
      * @param string $dir Direction: 'out' or 'in'
      * @param int $page Page number (1-based)
@@ -247,7 +247,7 @@ class GraphRedis
 
     /**
      * BFS 最短路径，返回 [距离, 路径数组] 或 null
-     * 
+     *
      * @param int $from Source node ID
      * @param int $to Target node ID
      * @param int $maxDepth Maximum search depth
@@ -258,7 +258,7 @@ class GraphRedis
         if ($from === $to) {
             return [0, [$from]];
         }
-        
+
         $q = new SplQueue();
         $q->enqueue([$from, 0, [$from]]);
         $seen = [$from => true];
@@ -284,7 +284,7 @@ class GraphRedis
 
     /**
      * 非递归 DFS，只返回访问顺序
-     * 
+     *
      * @param int $start Starting node ID
      * @param int $maxDepth Maximum search depth
      * @return array Array of visited node IDs in order
@@ -317,7 +317,7 @@ class GraphRedis
 
     /**
      * Get graph statistics
-     * 
+     *
      * @return array Statistics about the graph
      */
     public function getStats(): array
@@ -325,7 +325,7 @@ class GraphRedis
         $counterKey = $this->database === 0 ? 'global:node_id' : "global:node_id:db{$this->database}";
         $nodeCount = $this->redis->get($counterKey) ?: 0;
         $edgeCount = 0;
-        
+
         // Count edges by scanning all node edge lists
         $pattern = 'edge:*:out';
         $keys = $this->redis->keys($pattern);
@@ -342,7 +342,7 @@ class GraphRedis
 
     /**
      * Clear all graph data
-     * 
+     *
      * @return void
      */
     public function clear(): void
