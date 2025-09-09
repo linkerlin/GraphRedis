@@ -84,3 +84,4 @@ For detailed documentation in Chinese, see [README_CN.md](README_CN.md).
 
 Apache License - see [LICENSE](LICENSE) file for details.
 [【中文介绍】](README_CN.md)
+![ae55f8b030c0aa87b4c4303f8a02db7d.png](https://s2.loli.net/2025/09/09/q69j14Xr3NOMelV.png)

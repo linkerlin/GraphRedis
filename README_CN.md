@@ -379,3 +379,5 @@ global:node_id      -> String  # 节点ID计数器
 ## 📞 联系方式
 
 如有问题或建议，请通过 Issues 页面联系我们。
+
+![ae55f8b030c0aa87b4c4303f8a02db7d.png](https://s2.loli.net/2025/09/09/q69j14Xr3NOMelV.png)
