@@ -177,6 +177,31 @@ $followers = $graph->neighbors($bob, 'in');
 $neighbors = $graph->neighbors($alice, 'out', 2, 10);
 ```
 
+### Cypher 导入导出
+
+```php
+// 导出图数据为Cypher格式
+$exportStats = $graph->exportToCypher('/path/to/export.cypher', [
+    'include_comments' => true,
+    'default_node_label' => 'Person'
+]);
+
+// 从Cypher文件导入数据
+$importStats = $graph->importFromCypher('/path/to/data.cypher');
+
+// 生成Cypher脚本字符串
+$cypherScript = $graph->generateCypherScript();
+
+// 从字符串导入
+$cypherContent = '
+    CREATE (n1:Person {name: "Alice"});
+    CREATE (n2:Person {name: "Bob"});
+    MATCH (from {__id: 1}), (to {__id: 2})
+    CREATE (from)-[r:FRIEND]->(to);
+';
+$importStats = $graph->importFromCypherString($cypherContent);
+```
+
 ### 图遍历算法
 
 #### 最短路径查询 (BFS)

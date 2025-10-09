@@ -349,4 +349,61 @@ class GraphRedis
     {
         $this->redis->flushDb();
     }
+
+    /* ---------- Cypher 导入导出 ---------- */
+
+    /**
+     * 导出图数据为Cypher格式
+     *
+     * @param string $filePath 导出文件路径
+     * @param array $options 导出选项
+     * @return array 导出统计信息
+     * @throws \InvalidArgumentException
+     * @throws \RuntimeException
+     */
+    public function exportToCypher(string $filePath, array $options = []): array
+    {
+        $exporter = new CypherExporter($this);
+        return $exporter->exportToFile($filePath, $options);
+    }
+
+    /**
+     * 从Cypher文件导入图数据
+     *
+     * @param string $filePath Cypher文件路径
+     * @param array $options 导入选项
+     * @return array 导入统计信息
+     * @throws \InvalidArgumentException
+     * @throws \RuntimeException
+     */
+    public function importFromCypher(string $filePath, array $options = []): array
+    {
+        $importer = new CypherImporter($this);
+        return $importer->importFromFile($filePath, $options);
+    }
+
+    /**
+     * 生成Cypher脚本字符串
+     *
+     * @param array $options 导出选项
+     * @return string Cypher脚本内容
+     */
+    public function generateCypherScript(array $options = []): string
+    {
+        $exporter = new CypherExporter($this);
+        return $exporter->generateCypherScript($options);
+    }
+
+    /**
+     * 从Cypher字符串导入数据
+     *
+     * @param string $cypherContent Cypher内容
+     * @param array $options 导入选项
+     * @return array 导入统计信息
+     */
+    public function importFromCypherString(string $cypherContent, array $options = []): array
+    {
+        $importer = new CypherImporter($this);
+        return $importer->importFromString($cypherContent, $options);
+    }
 }
