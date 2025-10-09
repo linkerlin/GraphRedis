@@ -308,6 +308,86 @@ $cypherContent = '
 $importStats = $graph->importFromCypherString($cypherContent);
 ```
 
+### 💾 Redis数据库ID支持
+
+#### 核心优势
+- **数据库隔离**：在不同的Redis数据库间隔离存储图数据
+- **跨库迁移**：在不同数据库之间快速迁移数据
+- **备份与恢复**：对特定数据库进行定向备份和恢复
+- **环境隔离**：在同一Redis服务器上实现开发、测试、生产环境的数据隔离
+
+#### 使用示例
+
+```php
+// 连接到数据库10（默认）
+$graph = new GraphRedis();
+
+// 1. 在数据库10中创建数据
+$alice = $graph->addNode(['name' => 'Alice', 'role' => 'Developer']);
+$bob = $graph->addNode(['name' => 'Bob', 'role' => 'Designer']);
+$graph->addEdge($alice, $bob, 1.0, ['relation' => 'colleague']);
+
+// 2. 导出数据库10的数据
+$exportStats = $graph->exportToCypher('db10_export.cypher', [
+    'include_comments' => true
+], 10); // 显式指定数据库10
+
+echo "导出数据库: {$exportStats['database']}";
+
+// 3. 导入到数据库5
+$importStats = $graph->importFromCypher('db10_export.cypher', [
+    'continue_on_error' => false
+], 5); // 导入到数据库5
+
+echo "导入目标数据库: {$importStats['database']}";
+
+// 4. 验证数据库5中的数据
+$db5ExportStats = $graph->exportToCypher('db5_verification.cypher', [], 5);
+echo "数据库5统计: {$db5ExportStats['nodes_exported']} 节点, {$db5ExportStats['edges_exported']} 边";
+```
+
+#### 跨数据库迁移示例
+
+```php
+// 连接到不同数据库的实例
+$sourceGraph = new GraphRedis('127.0.0.1', 6379, 0, 10); // 源数据库
+$targetGraph = new GraphRedis('127.0.0.1', 6379, 0, 5);  // 目标数据库
+
+// 从数据库10导出
+$sourceGraph->exportToCypher('migration.cypher', [], 10);
+
+// 导入到数据库5
+$migrationStats = $targetGraph->importFromCypher('migration.cypher', [], 5);
+
+echo "迁移完成: {$migrationStats['nodes_created']} 节点, {$migrationStats['edges_created']} 边";
+```
+
+#### Cypher脚本生成支持
+
+```php
+// 生成指定数据库的Cypher脚本
+$db10Script = $graph->generateCypherScript([], 10);
+$db5Script = $graph->generateCypherScript([], 5);
+
+// 从字符串导入到指定数据库
+$importStats = $graph->importFromCypherString($db10Script, [], 0);
+echo "导入到数据库0: {$importStats['database']}";
+```
+
+#### API方法更新
+
+```php
+// 所有导入导出方法都支持可选的数据库ID参数
+
+// 导出方法
+exportToCypher(string $filePath, array $options = [], ?int $database = null): array
+generateCypherScript(array $options = [], ?int $database = null): string
+
+// 导入方法
+importFromCypher(string $filePath, array $options = [], ?int $database = null): array
+importFromCypherString(string $content, array $options = [], ?int $database = null): array
+```
+
 ---
 
 ## ⚡ 性能特性
