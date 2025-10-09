@@ -16,6 +16,7 @@ class CypherExporter
 {
     private GraphRedis $graph;
     private array $exportStats = [];
+    private ?int $originalDatabase = null; // 保存原始数据库ID
     
     /**
      * CypherExporter constructor
@@ -32,11 +33,12 @@ class CypherExporter
      * 
      * @param string $filePath 导出文件路径（.cypher扩展名）
      * @param array $options 导出选项
+     * @param int|null $database 指定Redis数据库ID（可选）
      * @return array 导出统计信息
      * @throws \InvalidArgumentException
      * @throws \RuntimeException
      */
-    public function exportToFile(string $filePath, array $options = []): array
+    public function exportToFile(string $filePath, array $options = [], ?int $database = null): array
     {
         // 验证文件路径
         if (!str_ends_with(strtolower($filePath), '.cypher')) {
@@ -49,16 +51,26 @@ class CypherExporter
             throw new \RuntimeException("无法创建目录: {$directory}");
         }
         
-        // 生成Cypher内容
-        $cypherContent = $this->generateCypherScript($options);
+        // 切换数据库（如果指定）
+        $this->switchDatabase($database);
         
-        // 写入文件
-        if (file_put_contents($filePath, $cypherContent) === false) {
-            throw new \RuntimeException("无法写入文件: {$filePath}");
+        try {
+            // 生成Cypher内容
+            $cypherContent = $this->generateCypherScript($options);
+            
+            // 写入文件
+            if (file_put_contents($filePath, $cypherContent) === false) {
+                throw new \RuntimeException("无法写入文件: {$filePath}");
+            }
+            
+            $this->exportStats['file_path'] = $filePath;
+            $this->exportStats['file_size'] = filesize($filePath);
+            $this->exportStats['database'] = $database ?? $this->getCurrentDatabase();
+            
+        } finally {
+            // 恢复原始数据库
+            $this->restoreDatabase();
         }
-        
-        $this->exportStats['file_path'] = $filePath;
-        $this->exportStats['file_size'] = filesize($filePath);
         
         return $this->exportStats;
     }
@@ -67,35 +79,46 @@ class CypherExporter
      * 生成完整的Cypher脚本
      * 
      * @param array $options 导出选项
+     * @param int|null $database 指定Redis数据库ID（可选）
      * @return string Cypher脚本内容
      */
-    public function generateCypherScript(array $options = []): string
+    public function generateCypherScript(array $options = [], ?int $database = null): string
     {
-        $startTime = microtime(true);
-        $cypher = [];
+        // 切换数据库（如果指定）
+        $this->switchDatabase($database);
         
-        // 添加文件头注释
-        $cypher[] = $this->generateHeader($options);
-        
-        // 导出节点
-        $nodesCypher = $this->exportNodes($options);
-        if (!empty($nodesCypher)) {
-            $cypher[] = "// ==================== 节点定义 ====================";
-            $cypher[] = $nodesCypher;
+        try {
+            $startTime = microtime(true);
+            $cypher = [];
+            
+            // 添加文件头注释
+            $cypher[] = $this->generateHeader($options);
+            
+            // 导出节点
+            $nodesCypher = $this->exportNodes($options);
+            if (!empty($nodesCypher)) {
+                $cypher[] = "// ==================== 节点定义 ====================";
+                $cypher[] = $nodesCypher;
+            }
+            
+            // 导出边关系
+            $edgesCypher = $this->exportEdges($options);
+            if (!empty($edgesCypher)) {
+                $cypher[] = "\n// ==================== 关系定义 ====================";
+                $cypher[] = $edgesCypher;
+            }
+            
+            // 添加统计信息
+            $this->exportStats['export_time'] = microtime(true) - $startTime;
+            $this->exportStats['database'] = $database ?? $this->getCurrentDatabase();
+            $cypher[] = $this->generateFooter();
+            
+            return implode("\n", $cypher);
+            
+        } finally {
+            // 恢复原始数据库
+            $this->restoreDatabase();
         }
-        
-        // 导出边关系
-        $edgesCypher = $this->exportEdges($options);
-        if (!empty($edgesCypher)) {
-            $cypher[] = "\n// ==================== 关系定义 ====================";
-            $cypher[] = $edgesCypher;
-        }
-        
-        // 添加统计信息
-        $this->exportStats['export_time'] = microtime(true) - $startTime;
-        $cypher[] = $this->generateFooter();
-        
-        return implode("\n", $cypher);
     }
     
     /**
@@ -111,10 +134,12 @@ class CypherExporter
         $batchSize = $options['batch_size'] ?? 1000;
         
         // 获取节点ID计数器
-        $counterKey = $this->graph->getRedis()->get('global:node_id') ?: 0;
+        $currentDatabase = $this->getCurrentDatabase();
+        $counterKey = $currentDatabase === 10 ? 'global:node_id' : "global:node_id:db{$currentDatabase}";
+        $maxNodeId = $this->graph->getRedis()->get($counterKey) ?: 0;
         
         // 批量处理节点
-        for ($nodeId = 1; $nodeId <= $counterKey; $nodeId++) {
+        for ($nodeId = 1; $nodeId <= $maxNodeId; $nodeId++) {
             $nodeData = $this->graph->getNode($nodeId);
             if ($nodeData === null) {
                 continue; // 跳过已删除的节点
@@ -382,5 +407,64 @@ class CypherExporter
     public function getExportStats(): array
     {
         return $this->exportStats;
+    }
+    
+    /**
+     * 切换到指定数据库
+     * 
+     * @param int|null $database 数据库ID
+     * @throws \RedisException
+     */
+    private function switchDatabase(?int $database): void
+    {
+        if ($database === null) {
+            return; // 不需要切换
+        }
+        
+        if ($database < 0 || $database > 15) {
+            throw new \InvalidArgumentException("Redis database number must be between 0 and 15, got {$database}");
+        }
+        
+        // 保存当前数据库ID
+        $this->originalDatabase = $this->getCurrentDatabase();
+        
+        // 切换到新数据库
+        if ($database !== $this->originalDatabase) {
+            if (!$this->graph->getRedis()->select($database)) {
+                throw new \RedisException("Failed to select Redis database {$database}");
+            }
+        }
+    }
+    
+    /**
+     * 恢复到原始数据库
+     * 
+     * @throws \RedisException
+     */
+    private function restoreDatabase(): void
+    {
+        if ($this->originalDatabase !== null) {
+            $currentDb = $this->getCurrentDatabase();
+            if ($currentDb !== $this->originalDatabase) {
+                if (!$this->graph->getRedis()->select($this->originalDatabase)) {
+                    throw new \RedisException("Failed to restore Redis database {$this->originalDatabase}");
+                }
+            }
+            $this->originalDatabase = null;
+        }
+    }
+    
+    /**
+     * 获取当前数据库ID
+     * 
+     * @return int 当前数据库ID
+     */
+    private function getCurrentDatabase(): int
+    {
+        // Redis没有直接获取当前数据库的方法，我们通过反射获取GraphRedis的数据库属性
+        $reflection = new \ReflectionClass($this->graph);
+        $databaseProperty = $reflection->getProperty('database');
+        $databaseProperty->setAccessible(true);
+        return $databaseProperty->getValue($this->graph);
     }
 }

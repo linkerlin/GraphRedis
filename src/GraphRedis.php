@@ -17,7 +17,7 @@ class GraphRedis
 {
     private Redis $redis;
     private int $pageSize = 100;   // neighbors 默认分页大小
-    private int $database = 0;     // Redis database number
+    private int $database = 10;    // Redis database number
 
     /**
      * GraphRedis constructor
@@ -28,7 +28,7 @@ class GraphRedis
      * @param int $database Redis database number (0-15)
      * @throws \RedisException
      */
-    public function __construct(string $host = '127.0.0.1', int $port = 6379, int $timeout = 0, int $database = 0)
+    public function __construct(string $host = '127.0.0.1', int $port = 6379, int $timeout = 0, int $database = 10)
     {
         if ($database < 0 || $database > 15) {
             throw new \InvalidArgumentException("Redis database number must be between 0 and 15, got {$database}");
@@ -41,7 +41,7 @@ class GraphRedis
             throw new \RedisException("Failed to connect to Redis server at {$host}:{$port}");
         }
 
-        if ($database !== 0) {
+        if ($database !== 10) {
             if (!$this->redis->select($database)) {
                 throw new \RedisException("Failed to select Redis database {$database}");
             }
@@ -79,7 +79,7 @@ class GraphRedis
      */
     public function addNode(array $prop): int
     {
-        $counterKey = $this->database === 0 ? 'global:node_id' : "global:node_id:db{$this->database}";
+        $counterKey = $this->database === 10 ? 'global:node_id' : "global:node_id:db{$this->database}";
         $id = $this->redis->incr($counterKey);
         if (!empty($prop)) {
             $this->redis->hMSet("node:$id", $prop);
@@ -322,7 +322,7 @@ class GraphRedis
      */
     public function getStats(): array
     {
-        $counterKey = $this->database === 0 ? 'global:node_id' : "global:node_id:db{$this->database}";
+        $counterKey = $this->database === 10 ? 'global:node_id' : "global:node_id:db{$this->database}";
         $nodeCount = $this->redis->get($counterKey) ?: 0;
         $edgeCount = 0;
 
@@ -357,14 +357,15 @@ class GraphRedis
      *
      * @param string $filePath 导出文件路径
      * @param array $options 导出选项
+     * @param int|null $database 指定Redis数据库ID（可选）
      * @return array 导出统计信息
      * @throws \InvalidArgumentException
      * @throws \RuntimeException
      */
-    public function exportToCypher(string $filePath, array $options = []): array
+    public function exportToCypher(string $filePath, array $options = [], ?int $database = null): array
     {
         $exporter = new CypherExporter($this);
-        return $exporter->exportToFile($filePath, $options);
+        return $exporter->exportToFile($filePath, $options, $database);
     }
 
     /**
@@ -372,26 +373,28 @@ class GraphRedis
      *
      * @param string $filePath Cypher文件路径
      * @param array $options 导入选项
+     * @param int|null $database 指定Redis数据库ID（可选）
      * @return array 导入统计信息
      * @throws \InvalidArgumentException
      * @throws \RuntimeException
      */
-    public function importFromCypher(string $filePath, array $options = []): array
+    public function importFromCypher(string $filePath, array $options = [], ?int $database = null): array
     {
         $importer = new CypherImporter($this);
-        return $importer->importFromFile($filePath, $options);
+        return $importer->importFromFile($filePath, $options, $database);
     }
 
     /**
      * 生成Cypher脚本字符串
      *
      * @param array $options 导出选项
+     * @param int|null $database 指定Redis数据库ID（可选）
      * @return string Cypher脚本内容
      */
-    public function generateCypherScript(array $options = []): string
+    public function generateCypherScript(array $options = [], ?int $database = null): string
     {
         $exporter = new CypherExporter($this);
-        return $exporter->generateCypherScript($options);
+        return $exporter->generateCypherScript($options, $database);
     }
 
     /**
@@ -399,11 +402,12 @@ class GraphRedis
      *
      * @param string $cypherContent Cypher内容
      * @param array $options 导入选项
+     * @param int|null $database 指定Redis数据库ID（可选）
      * @return array 导入统计信息
      */
-    public function importFromCypherString(string $cypherContent, array $options = []): array
+    public function importFromCypherString(string $cypherContent, array $options = [], ?int $database = null): array
     {
         $importer = new CypherImporter($this);
-        return $importer->importFromString($cypherContent, $options);
+        return $importer->importFromString($cypherContent, $options, $database);
     }
 }

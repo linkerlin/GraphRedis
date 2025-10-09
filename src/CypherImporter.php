@@ -18,6 +18,7 @@ class CypherImporter
     private array $nodeMapping = []; // 临时ID到实际ID的映射
     private array $importStats = [];
     private array $errors = [];
+    private ?int $originalDatabase = null; // 保存原始数据库ID
     
     /**
      * CypherImporter constructor
@@ -34,11 +35,12 @@ class CypherImporter
      * 
      * @param string $filePath Cypher文件路径
      * @param array $options 导入选项
+     * @param int|null $database 指定Redis数据库ID（可选）
      * @return array 导入统计信息
      * @throws \InvalidArgumentException
      * @throws \RuntimeException
      */
-    public function importFromFile(string $filePath, array $options = []): array
+    public function importFromFile(string $filePath, array $options = [], ?int $database = null): array
     {
         // 验证文件
         if (!file_exists($filePath)) {
@@ -55,7 +57,7 @@ class CypherImporter
             throw new \RuntimeException("无法读取文件: {$filePath}");
         }
         
-        return $this->importFromString($content, $options);
+        return $this->importFromString($content, $options, $database);
     }
     
     /**
@@ -63,14 +65,18 @@ class CypherImporter
      * 
      * @param string $cypherContent Cypher内容
      * @param array $options 导入选项
+     * @param int|null $database 指定Redis数据库ID（可选）
      * @return array 导入统计信息
      */
-    public function importFromString(string $cypherContent, array $options = []): array
+    public function importFromString(string $cypherContent, array $options = [], ?int $database = null): array
     {
-        $startTime = microtime(true);
-        $this->resetState();
+        // 切换数据库（如果指定）
+        $this->switchDatabase($database);
         
         try {
+            $startTime = microtime(true);
+            $this->resetState();
+            
             // 预处理内容
             $statements = $this->preprocessContent($cypherContent);
             
@@ -79,6 +85,7 @@ class CypherImporter
             
             $this->importStats['import_time'] = microtime(true) - $startTime;
             $this->importStats['success'] = true;
+            $this->importStats['database'] = $database ?? $this->getCurrentDatabase();
             
         } catch (\Exception $e) {
             $this->importStats['import_time'] = microtime(true) - $startTime;
@@ -88,6 +95,9 @@ class CypherImporter
             if ($options['throw_on_error'] ?? true) {
                 throw $e;
             }
+        } finally {
+            // 恢复原始数据库
+            $this->restoreDatabase();
         }
         
         return $this->importStats;
@@ -509,5 +519,64 @@ class CypherImporter
     public function getNodeMapping(): array
     {
         return $this->nodeMapping;
+    }
+    
+    /**
+     * 切换到指定数据库
+     * 
+     * @param int|null $database 数据库ID
+     * @throws \RedisException
+     */
+    private function switchDatabase(?int $database): void
+    {
+        if ($database === null) {
+            return; // 不需要切换
+        }
+        
+        if ($database < 0 || $database > 15) {
+            throw new \InvalidArgumentException("Redis database number must be between 0 and 15, got {$database}");
+        }
+        
+        // 保存当前数据库ID
+        $this->originalDatabase = $this->getCurrentDatabase();
+        
+        // 切换到新数据库
+        if ($database !== $this->originalDatabase) {
+            if (!$this->graph->getRedis()->select($database)) {
+                throw new \RedisException("Failed to select Redis database {$database}");
+            }
+        }
+    }
+    
+    /**
+     * 恢复到原始数据库
+     * 
+     * @throws \RedisException
+     */
+    private function restoreDatabase(): void
+    {
+        if ($this->originalDatabase !== null) {
+            $currentDb = $this->getCurrentDatabase();
+            if ($currentDb !== $this->originalDatabase) {
+                if (!$this->graph->getRedis()->select($this->originalDatabase)) {
+                    throw new \RedisException("Failed to restore Redis database {$this->originalDatabase}");
+                }
+            }
+            $this->originalDatabase = null;
+        }
+    }
+    
+    /**
+     * 获取当前数据库ID
+     * 
+     * @return int 当前数据库ID
+     */
+    private function getCurrentDatabase(): int
+    {
+        // Redis没有直接获取当前数据库的方法，我们通过反射获取GraphRedis的数据库属性
+        $reflection = new \ReflectionClass($this->graph);
+        $databaseProperty = $reflection->getProperty('database');
+        $databaseProperty->setAccessible(true);
+        return $databaseProperty->getValue($this->graph);
     }
 }
